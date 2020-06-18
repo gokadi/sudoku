@@ -1,6 +1,19 @@
 import curses
 from curses import panel
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, NamedTuple
+
+
+class MenuItemCallback(NamedTuple):
+    func: Callable
+    kwargs: Optional[dict] = {}
+
+
+class MenuItem(NamedTuple):
+    label: str
+    # If you need to go upper level in menu or close,
+    # callback should return True
+    callback: MenuItemCallback
+    callback_on_exit: Optional[MenuItemCallback] = None
 
 
 class Menu:
@@ -9,7 +22,7 @@ class Menu:
         items: list,
         window,
         screen_sizes: tuple,
-        type_messages: Optional[List[Callable]]
+        type_messages: Optional[List[Callable]] = None
     ):
         self.window = window
         self.type_messages = type_messages
@@ -20,8 +33,7 @@ class Menu:
 
         self.active_menu_item_index = 0
         self.items = items
-        self.items.append(('Exit', 'exit'))
-        self.is_menu_active = False
+        self.close_menu = False
 
     def navigate(self, n: int):
         self.active_menu_item_index += n
@@ -31,11 +43,9 @@ class Menu:
             self.active_menu_item_index = 0
 
     def display(self):
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
-        self.window.bkgd(' ', curses.color_pair(1))
         self.window.clear()
         self.window.refresh()
-
+        active_item = self.items[0]
         max_len_of_menu_item = max(len(item[0]) for item in self.items)
         initial_x_position = (
             self.screen_sizes[1] - max_len_of_menu_item
@@ -44,9 +54,10 @@ class Menu:
             self.screen_sizes[0] - len(self.items)
         ) // 2
 
-        while not self.is_menu_active:
-            for type_msg_func in self.type_messages:
-                type_msg_func()
+        while not self.close_menu:
+            if self.type_messages:
+                for type_msg_func in self.type_messages:
+                    type_msg_func()
             self.window.refresh()
             for index, item in enumerate(self.items):
                 is_item_chosen = index == self.active_menu_item_index
@@ -61,27 +72,19 @@ class Menu:
             active_item = self.items[self.active_menu_item_index]
 
             if key in [curses.KEY_ENTER, ord('\n')]:
-                # refactor this to new MenuItem type
-                do_need_exit = (
-                    isinstance(active_item[1][0], Callable)
-                    and active_item[1][0]()
+                self.close_menu = active_item.callback.func(
+                    **active_item.callback.kwargs
                 )
-                self.is_menu_active = do_need_exit or (
-                    self.active_menu_item_index == len(self.items) - 1
-                )
-
             elif key == curses.KEY_UP:
                 self.navigate(-1)
-
             elif key == curses.KEY_DOWN:
                 self.navigate(1)
 
-        self.is_menu_active = False
+        self.close_menu = False
         self.window.clear()
         self.window.refresh()
-        # refactor this
-        if len(active_item[1]) == 2:
-            active_item[1][1]()
+
+        active_item.callback_on_exit and active_item.callback_on_exit.func()
 
     def hide(self):
         self.window.clear()

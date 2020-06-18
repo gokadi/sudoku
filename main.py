@@ -1,7 +1,7 @@
 import curses
 from enum import Enum
 
-from menu import Menu
+from menu import Menu, MenuItem, MenuItemCallback
 from sudoku import (
     SudokuBoard, Sudoku, ItemCoordinate, BOARD_ROWS,
     BOARD_COLUMNS, DEFAULT_POINTER_POSITION
@@ -17,7 +17,7 @@ CONTROLS_HELP = (
 #     'Underlined `-` means there is only one possible value for this cell.'
 # )
 USER_HINTS_HELP = (
-    'Hints:\n- (H) fill in the cell.'
+    '\nHints:\n- (H) fill in the cell.'
 )
 
 
@@ -29,46 +29,60 @@ class Levels(int, Enum):
 
 class SudokuMain:
     def __init__(self, window):
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
         self.window = window
+        self.window.bkgd(' ', curses.color_pair(1))
         self.screen_sizes = self.window.getmaxyx()
         self.level = Levels.easy
         self.hints_on = False
         self.dev_hints_on = False
         curses.curs_set(0)
-        # describe type for menu item with callbacks
-        # first callback to handle menu click, second to do after menu exit
         change_level_submenu_items = [
-            (Levels.easy.name.capitalize(), [self.set_level_easy]),
-            (
+            MenuItem(
+                Levels.easy.name.capitalize(),
+                MenuItemCallback(self._set_level, {'level': Levels.easy})
+            ),
+            MenuItem(
                 Levels.normal.name.capitalize() + ' (may be slow)',
-                [self.set_level_normal]
+                MenuItemCallback(self._set_level, {'level': Levels.normal})
             ),
-            (
+            MenuItem(
                 Levels.hard.name.capitalize() + ' (may be slow)',
-                [self.set_level_hard]
+                MenuItemCallback(self._set_level, {'level': Levels.hard})
             ),
+            MenuItem('Exit', MenuItemCallback(lambda: True))
         ]
         change_level_submenu = Menu(
             change_level_submenu_items, self.window,
             self.screen_sizes,
-            type_messages=[self.__type_level, self.__type_hints]
+            type_messages=[self._type_level, self._type_hints]
         )
         main_menu_items = [
-            ('Start', [self.close_menu, self.start_game]),
-            ('Level', [change_level_submenu.display]),
-            ('Hints', [self.toggle_hints])
+            MenuItem(
+                'Start',
+                MenuItemCallback(self.close_menu),
+                MenuItemCallback(self.start_game)
+            ),
+            MenuItem('Level', MenuItemCallback(change_level_submenu.display)),
+            MenuItem('Hints', MenuItemCallback(self.toggle_hints)),
+            # Uncomment below for cheating
+            # MenuItem('Hints_dev', self.toggle_dev_hints),
+            MenuItem('Exit', MenuItemCallback(lambda: True))
         ]
         self.main_menu = Menu(
             main_menu_items, self.window, self.screen_sizes,
-            type_messages=[self.__type_level, self.__type_hints]
+            type_messages=[self._type_level, self._type_hints]
         )
         self.main_menu.display()
 
+    def toggle_dev_hints(self):
+        self.dev_hints_on = not self.hints_on
+
     def toggle_hints(self):
         self.hints_on = not self.hints_on
-        self.__type_hints()
+        self._type_hints()
 
-    def __type_hints(self):
+    def _type_hints(self):
         self.window.move(self.screen_sizes[0] - 3, 0)
         self.window.clrtoeol()
         message = f'Hints: {"on" if self.hints_on else "off"}'
@@ -78,7 +92,7 @@ class SudokuMain:
             message, curses.A_BOLD
         )
 
-    def __type_level(self):
+    def _type_level(self):
         self.window.move(self.screen_sizes[0] - 2, 0)
         self.window.clrtoeol()
         message = f'Chosen level: {self.level.name}'
@@ -88,113 +102,97 @@ class SudokuMain:
             message, curses.A_BOLD
         )
 
-    def __set_level(self, level: Levels):
-        self.level = level
-        self.__type_level()
-
-    def set_level_easy(self):
-        self.__set_level(Levels.easy)
-        return True
-
-    def set_level_normal(self):
-        self.__set_level(Levels.normal)
-        return True
-
-    def set_level_hard(self):
-        self.__set_level(Levels.hard)
-        return True
+    def _set_level(self, **kwargs):
+        self.level = kwargs['level']
+        self._type_level()
 
     def close_menu(self):
         return True
 
-    def draw_help(self, init_row: int, init_column: int):
-        if self.hints_on:
-            help_text = CONTROLS_HELP + USER_HINTS_HELP
-        else:
-            help_text = CONTROLS_HELP
-        help_box = self.window.subwin(13, 40, init_row, init_column)
-        help_box.box()
-        help_box.refresh()
-        help_box_text = help_box.subwin(11, 38, init_row + 1, init_column + 1)
-        help_box_text.move(0, 0)
-        help_box_text.addstr(help_text.format(level=self.level.name))
-        help_box_text.refresh()
-
-    def get_and_draw_message_box(self, init_row: int, init_column: int):
-        message_box_init_column = init_column - 25
-        message_box_init_row = init_row
-        message_box = self.window.subwin(
-            13, 25, message_box_init_row, message_box_init_column
+    def get_and_draw_textbox(self, init_row: int, init_column: int):
+        textbox_wrapper = self.window.subwin(
+            BOARD_ROWS, BOARD_COLUMNS, init_row, init_column
         )
-        message_box.box()
-        message_box.refresh()
-        message_box_text = message_box.subwin(
-            11, 23, message_box_init_row + 1, message_box_init_column + 1
+        textbox_wrapper.box()
+        textbox_wrapper.refresh()
+        textbox = textbox_wrapper.subwin(
+            BOARD_ROWS - 2, BOARD_COLUMNS - 2, init_row + 1, init_column + 1
         )
 
-        return message_box_text
+        return textbox
 
-    def draw_message_in_box(self, box, message: str):
+    @staticmethod
+    def type_message_in_box(box, message: str):
         box.clear()
         box.move(0, 0)
         box.addstr(message)
         box.refresh()
 
     def start_game(self):
-        sudoku = Sudoku()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
         self.window.border(0)
         self.window.refresh()
-        self.window.bkgd(' ', curses.color_pair(1))
         init_row = (self.screen_sizes[0] - BOARD_ROWS) // 2
         init_column = (self.screen_sizes[1] - BOARD_COLUMNS) // 2
         board_box = self.window.subwin(
             BOARD_ROWS, BOARD_COLUMNS, init_row, init_column
         )
+        message_box = self.get_and_draw_textbox(
+            init_row, init_column - BOARD_COLUMNS
+        )
+        help_box = self.get_and_draw_textbox(
+            init_row, init_column + BOARD_COLUMNS
+        )
+        if self.hints_on:
+            help_text = CONTROLS_HELP + USER_HINTS_HELP
+        else:
+            help_text = CONTROLS_HELP
+        self.type_message_in_box(help_box, help_text)
+
         board_box.box()
+
+        sudoku = Sudoku()
         board = SudokuBoard(board_box, sudoku)
         board.draw_grid()
-        message_box = self.get_and_draw_message_box(init_row, init_column)
-        self.draw_help(init_row, init_column + BOARD_COLUMNS)
+
         pointer = DEFAULT_POINTER_POSITION
         pointer_column = pointer.column
         pointer_row = pointer.row
-        self.draw_message_in_box(
+        self.type_message_in_box(
             message_box, 'Started generating new board...'
         )
         sudoku.populate(self.level.value)
         board.draw_items(pointer, self.dev_hints_on)
-        self.draw_message_in_box(
+        self.type_message_in_box(
             message_box, 'Finished generating board!'
         )
         while True:
             is_solved = sudoku.is_solved()
             if is_solved:
-                self.draw_message_in_box(message_box, 'Solved sudoku!')
+                self.type_message_in_box(message_box, 'Solved sudoku!')
             key = chr(self.window.getch())
             if key == 'q':
                 break
             elif not is_solved and self.dev_hints_on and key == 'c':
                 if sudoku.candidates(pointer):
-                    self.draw_message_in_box(
+                    self.type_message_in_box(
                         message_box,
                         f'Possible values for this cell: '
                         f'{sudoku.candidates(pointer)}'
                     )
                 else:
-                    self.draw_message_in_box(
+                    self.type_message_in_box(
                         message_box, 'This is a predefined cell.'
                     )
             elif not is_solved and self.dev_hints_on and key == 's':
-                self.draw_message_in_box(message_box, 'Started solving...')
+                self.type_message_in_box(message_box, 'Started solving...')
                 if not sudoku.solve():
-                    self.draw_message_in_box(message_box, 'Could not solve.')
+                    self.type_message_in_box(message_box, 'Could not solve.')
                 board.draw_items(
                     ItemCoordinate(row=pointer_row, column=pointer_column),
                     self.dev_hints_on
                 )
             elif key == 'n':
-                self.draw_message_in_box(
+                self.type_message_in_box(
                     message_box, 'Started generating new board...'
                 )
                 sudoku.clear()
@@ -203,7 +201,7 @@ class SudokuMain:
                 sudoku.populate(self.level.value)
                 board.draw_items(pointer, self.dev_hints_on)
 
-                self.draw_message_in_box(
+                self.type_message_in_box(
                     message_box, 'Finished generating board!'
                 )
             elif self.hints_on and key == 'h':
@@ -211,7 +209,7 @@ class SudokuMain:
                     sudoku.fill_cell(pointer)
                     board.draw_items(pointer, self.dev_hints_on)
                 except Exception as e:
-                    self.draw_message_in_box(message_box, str(e))
+                    self.type_message_in_box(message_box, str(e))
             elif key == chr(curses.KEY_LEFT):
                 pointer_column -= 1
                 if pointer_column < 0:
@@ -257,9 +255,9 @@ class SudokuMain:
                     sudoku[pointer] = ord(key) - ord('0')
                     board.draw_items(pointer, self.dev_hints_on)
                 except Exception as e:
-                    self.draw_message_in_box(message_box, str(e))
+                    self.type_message_in_box(message_box, str(e))
             else:
-                self.draw_message_in_box(
+                self.type_message_in_box(
                     message_box,
                     'Unknown button.\nMake sure you switched to EN.'
                 )
