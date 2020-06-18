@@ -9,6 +9,8 @@ class MainMenu:
     def __init__(self, window):
         self.window = window
         self.screen_sizes = self.window.getmaxyx()
+        curses.init_pair(99, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        self.window.bkgd(' ', curses.color_pair(99))
         sudoku_menu = SudokuMain(self.window).main_menu
         snake_menu = SnakeMain(self.window).main_menu
         main_menu_items = [
