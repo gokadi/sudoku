@@ -1,12 +1,6 @@
 import copy
-import curses
 import random
-import time
 from typing import NamedTuple
-
-# Should not be changed or board will become ugly
-BOARD_ROWS = 13
-BOARD_COLUMNS = 25
 
 
 class ItemCoordinate(NamedTuple):
@@ -70,6 +64,7 @@ class Sudoku:
     def __init__(self):
         self.blocks = [Block() for _ in range(9)]
         self.virtual_sudoku = copy.deepcopy(self)
+        self.cached_sudoku = copy.deepcopy(self)
 
     def clear(self):
         for block in self.blocks:
@@ -121,6 +116,7 @@ class Sudoku:
             self[coordinate] *= -1
 
         self.virtual_sudoku = copy.deepcopy(self)
+        self.cached_sudoku = copy.deepcopy(self)
         self.virtual_sudoku.solve()
 
     def __getitem__(self, item_coordinate: ItemCoordinate):
@@ -196,91 +192,3 @@ class Sudoku:
                     return True
                 else:
                     self[item_coordinate] = 0
-
-
-class SudokuBoard:
-    def __init__(self, window, sudoku: Sudoku):
-        self.window = window
-        self.screen_sizes = self.window.getmaxyx()
-        self.sudoku = sudoku
-
-    def draw_grid(self):
-        """
-        ┌───────┬───────┬───────┐
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        ├───────┼───────┼───────┤<- second_row
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        ├───────┼───────┼───────┤<- third_row
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        │ 0 0 0 │ 0 0 0 │ 0 0 0 │
-        └───────┴───────┴───────┘<- last_row
-                ^       ^       ^
-                |       |       |
-         second_column  |   last_column
-                     third_column
-        No need to compute `first_column` and `first_row`, because it's
-        provided by `board_box` borders
-        """
-        last_row = BOARD_ROWS - 1
-        second_row = last_row // 3
-        third_row = last_row // 3 * 2
-
-        last_column = BOARD_COLUMNS - 1
-        second_column = last_column // 3
-        third_column = last_column // 3 * 2
-        # Can not use nested boxes here because it's ugly
-        self.window.vline(0, second_column, curses.ACS_VLINE, BOARD_ROWS)
-        self.window.vline(0, third_column, curses.ACS_VLINE, BOARD_ROWS)
-        self.window.hline(second_row, 0, curses.ACS_HLINE, BOARD_COLUMNS)
-        self.window.hline(third_row, 0, curses.ACS_HLINE, BOARD_COLUMNS)
-        self.window.addch(0, second_column, curses.ACS_TTEE)
-        self.window.addch(0, third_column, curses.ACS_TTEE)
-        self.window.addch(last_row, second_column, curses.ACS_BTEE)
-        self.window.addch(last_row, third_column, curses.ACS_BTEE)
-        self.window.addch(second_row, 0, curses.ACS_LTEE)
-        self.window.addch(third_row, 0, curses.ACS_LTEE)
-        self.window.addch(second_row, last_column, curses.ACS_RTEE)
-        self.window.addch(third_row, last_column, curses.ACS_RTEE)
-        self.window.addch(second_row, second_column, curses.ACS_PLUS)
-        self.window.addch(second_row, third_column, curses.ACS_PLUS)
-        self.window.addch(third_row, second_column, curses.ACS_PLUS)
-        self.window.addch(third_row, third_column, curses.ACS_PLUS)
-        self.window.refresh()
-
-    def draw_items(
-        self, active_item: ItemCoordinate = DEFAULT_POINTER_POSITION,
-        hints_on: bool = False
-    ):
-        for y in range(0, 9):
-            for x in range(0, 9):
-                item_coordinates = ItemCoordinate(column=x, row=y)
-                value = self.sudoku[item_coordinates]
-                attrs = curses.A_BOLD if value < 0 else 0
-                # Mark cells with only one possible solution.
-                if (
-                    hints_on
-                    and len(self.sudoku.candidates(item_coordinates)) == 1
-                ):
-                    attrs |= curses.A_UNDERLINE
-                item_board_coords = ITEM_COORD_TO_BOARD_MAPPER[
-                    item_coordinates
-                ]
-                if item_coordinates == active_item:
-                    attrs |= curses.A_REVERSE
-                if value == 0:
-                    self.window.addch(
-                        item_board_coords.row, item_board_coords.column,
-                        '-', attrs
-                    )
-                else:
-                    self.window.addch(
-                        item_board_coords.row, item_board_coords.column,
-                        ord('0') + abs(value), attrs
-                    )
-
-                self.window.refresh()
