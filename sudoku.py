@@ -1,3 +1,4 @@
+import copy
 import curses
 import random
 import time
@@ -68,13 +69,13 @@ class Sudoku:
 
     def __init__(self):
         self.blocks = [Block() for _ in range(9)]
+        self.virtual_sudoku = copy.deepcopy(self)
 
     def clear(self):
         for block in self.blocks:
             block.items = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     def candidates(self, item_coordinate: ItemCoordinate):
-        """Return all candidates at the point (x, y)."""
         candidates = set()
         previous = self[item_coordinate]
         for i in self.allowed_values:
@@ -88,10 +89,6 @@ class Sudoku:
         return candidates
 
     def populate(self, n: int = 36):
-        """Populate ca. n fields of the Sudoku.
-        Clear the Sudoku, run the solver using random values and
-        remove as many values as possible.
-        """
         # Cached values used in solve() and populate()
         coordinates = list(ITEM_COORD_TO_BOARD_MAPPER.keys())
         # Randomize the list of points and values
@@ -122,6 +119,9 @@ class Sudoku:
 
         for coordinate in coordinates:
             self[coordinate] *= -1
+
+        self.virtual_sudoku = copy.deepcopy(self)
+        self.virtual_sudoku.solve()
 
     def __getitem__(self, item_coordinate: ItemCoordinate):
         block_column = item_coordinate.column // 3
@@ -165,11 +165,10 @@ class Sudoku:
     def is_solved(self):
         return all(0 not in self.blocks[i].items for i in range(0, 9))
 
+    def fill_cell(self, item_coordinates: ItemCoordinate):
+        self[item_coordinates] = self.virtual_sudoku[item_coordinates]
+
     def solve(self, check=False):
-        """Solve the Sudoku.
-        If 'reset' is True, just check whether the sudoku can be solved,
-        after return the sudoku will be identical to before the call.
-        """
         if self.is_solved():
             return True
 
@@ -273,8 +272,15 @@ class SudokuBoard:
                 ]
                 if item_coordinates == active_item:
                     attrs |= curses.A_REVERSE
-                self.window.addch(
-                    item_board_coords.row, item_board_coords.column,
-                    ord('0') + abs(value), attrs
-                )
+                if value == 0:
+                    self.window.addch(
+                        item_board_coords.row, item_board_coords.column,
+                        '-', attrs
+                    )
+                else:
+                    self.window.addch(
+                        item_board_coords.row, item_board_coords.column,
+                        ord('0') + abs(value), attrs
+                    )
+
                 self.window.refresh()

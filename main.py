@@ -11,9 +11,13 @@ CONTROLS_HELP = (
     'Chosen level: {level}.\nControls:\n- (N) new game;\n'
     '- (↑↓→←) choose cell;\n- (Q) quit;\n- (R) reset;\n'
 )
-HINTS_HELP = (
-    'Hints:\n- (c)andidates;\n- (s)olve.\n'
-    'Underlined `0` means there is only one possible value for this cell.'
+# Uncomment below for cheating
+# HINTS_HELP = (
+#     'Hints:\n- (C) candidates;\n- (S) solve.\n'
+#     'Underlined `-` means there is only one possible value for this cell.'
+# )
+USER_HINTS_HELP = (
+    'Hints:\n- (H) fill in the cell.'
 )
 
 
@@ -29,6 +33,7 @@ class SudokuMain:
         self.screen_sizes = self.window.getmaxyx()
         self.level = Levels.easy
         self.hints_on = False
+        self.dev_hints_on = False
         curses.curs_set(0)
         # describe type for menu item with callbacks
         # first callback to handle menu click, second to do after menu exit
@@ -104,7 +109,7 @@ class SudokuMain:
 
     def draw_help(self, init_row: int, init_column: int):
         if self.hints_on:
-            help_text = CONTROLS_HELP + HINTS_HELP
+            help_text = CONTROLS_HELP + USER_HINTS_HELP
         else:
             help_text = CONTROLS_HELP
         help_box = self.window.subwin(13, 40, init_row, init_column)
@@ -137,7 +142,7 @@ class SudokuMain:
 
     def start_game(self):
         sudoku = Sudoku()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_GREEN)
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
         self.window.border(0)
         self.window.refresh()
         self.window.bkgd(' ', curses.color_pair(1))
@@ -158,7 +163,7 @@ class SudokuMain:
             message_box, 'Started generating new board...'
         )
         sudoku.populate(self.level.value)
-        board.draw_items(pointer, self.hints_on)
+        board.draw_items(pointer, self.dev_hints_on)
         self.draw_message_in_box(
             message_box, 'Finished generating board!'
         )
@@ -169,7 +174,7 @@ class SudokuMain:
             key = chr(self.window.getch())
             if key == 'q':
                 break
-            elif not is_solved and self.hints_on and key == 'c':
+            elif not is_solved and self.dev_hints_on and key == 'c':
                 if sudoku.candidates(pointer):
                     self.draw_message_in_box(
                         message_box,
@@ -180,27 +185,33 @@ class SudokuMain:
                     self.draw_message_in_box(
                         message_box, 'This is a predefined cell.'
                     )
-            elif not is_solved and self.hints_on and key == 's':
+            elif not is_solved and self.dev_hints_on and key == 's':
                 self.draw_message_in_box(message_box, 'Started solving...')
                 if not sudoku.solve():
                     self.draw_message_in_box(message_box, 'Could not solve.')
                 board.draw_items(
                     ItemCoordinate(row=pointer_row, column=pointer_column),
-                    self.hints_on
+                    self.dev_hints_on
                 )
             elif key == 'n':
                 self.draw_message_in_box(
                     message_box, 'Started generating new board...'
                 )
                 sudoku.clear()
-                board.draw_items(pointer, self.hints_on)
+                board.draw_items(pointer, self.dev_hints_on)
 
                 sudoku.populate(self.level.value)
-                board.draw_items(pointer, self.hints_on)
+                board.draw_items(pointer, self.dev_hints_on)
 
                 self.draw_message_in_box(
                     message_box, 'Finished generating board!'
                 )
+            elif self.hints_on and key == 'h':
+                try:
+                    sudoku.fill_cell(pointer)
+                    board.draw_items(pointer, self.dev_hints_on)
+                except Exception as e:
+                    self.draw_message_in_box(message_box, str(e))
             elif key == chr(curses.KEY_LEFT):
                 pointer_column -= 1
                 if pointer_column < 0:
@@ -210,7 +221,7 @@ class SudokuMain:
                 pointer = ItemCoordinate(
                     row=pointer_row, column=pointer_column
                 )
-                board.draw_items(pointer, self.hints_on)
+                board.draw_items(pointer, self.dev_hints_on)
             elif key == chr(curses.KEY_RIGHT):
                 pointer_column += 1
                 if pointer_column < 0:
@@ -220,7 +231,7 @@ class SudokuMain:
                 pointer = ItemCoordinate(
                     row=pointer_row, column=pointer_column
                 )
-                board.draw_items(pointer, self.hints_on)
+                board.draw_items(pointer, self.dev_hints_on)
             elif key == chr(curses.KEY_UP):
                 pointer_row -= 1
                 if pointer_row < 0:
@@ -230,7 +241,7 @@ class SudokuMain:
                 pointer = ItemCoordinate(
                     row=pointer_row, column=pointer_column
                 )
-                board.draw_items(pointer, self.hints_on)
+                board.draw_items(pointer, self.dev_hints_on)
             elif key == chr(curses.KEY_DOWN):
                 pointer_row += 1
                 if pointer_row < 0:
@@ -240,11 +251,11 @@ class SudokuMain:
                 pointer = ItemCoordinate(
                     row=pointer_row, column=pointer_column
                 )
-                board.draw_items(pointer, self.hints_on)
+                board.draw_items(pointer, self.dev_hints_on)
             elif not is_solved and key in '0123456789':
                 try:
                     sudoku[pointer] = ord(key) - ord('0')
-                    board.draw_items(pointer, self.hints_on)
+                    board.draw_items(pointer, self.dev_hints_on)
                 except Exception as e:
                     self.draw_message_in_box(message_box, str(e))
             else:
