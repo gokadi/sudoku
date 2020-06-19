@@ -12,9 +12,9 @@ CONTROLS_HELP = (
 
 
 class Levels(int, Enum):
-    easy = 36
-    normal = 18
-    hard = 9
+    easy = 140
+    normal = 80
+    hard = 50
 
 
 class SnakeMain:
@@ -59,10 +59,9 @@ class SnakeMain:
         self.level = Levels.easy
         self.score = 0
         curses.curs_set(0)
-        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_WHITE)
-        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_WHITE)
+        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
         self.main_menu = self.get_menu()
-        # self.sudoku = Sudoku()
 
     def _type_level(self):
         self.window.move(self.screen_sizes[0] - 2, 0)
@@ -99,7 +98,6 @@ class SnakeMain:
     def type_message_in_box(box, message: str):
         box.move(0, 0)
         box.addstr(message)
-        box.refresh()
 
     def type_score_in_box(self, box, message: str):
         box.move(
@@ -113,51 +111,52 @@ class SnakeMain:
     def draw_snake(self, box, snake: Snake):
         for snake_tail in snake.tail:
             box.move(snake_tail.row, snake_tail.column)
-            box.addstr('■', curses.color_pair(2))
+            box.addstr('⧳', curses.color_pair(2))
         box.move(snake.head.row, snake.head.column)
-        box.addstr('◯', curses.color_pair(1))
+        box.addstr('◍', curses.color_pair(1))
         box.refresh()
 
     def draw_apples(self, box, apples: list):
         for apple in apples:
-            box.move(apple.row, apple.column)
-            box.addstr('*', curses.color_pair(1))
+            try:
+                box.move(apple.row, apple.column)
+            except Exception as e:
+                assert False, (apple.row, apple.column, e)
+            box.addstr('◍', curses.color_pair(1) | curses.A_BOLD)
         box.refresh()
 
     def start_game(self):
-        self.window.border(0)
-        self.window.refresh()
         init_row = 0
         init_column = 0
         board_rows = self.screen_sizes[0]
         board_columns = self.screen_sizes[1] - HELP_BOX_COLUMNS
 
         board_box = self.window.subwin(
-            self.screen_sizes[0], self.screen_sizes[1] - HELP_BOX_COLUMNS,
+            self.screen_sizes[0],
+            self.screen_sizes[1] - HELP_BOX_COLUMNS,
             init_row, init_column
         )
         board_box.box()
-        help_box, help_box_wrapper = self._get_and_draw_textbox(init_row, board_columns)
+        help_box, help_box_wrapper = self._get_and_draw_textbox(
+            init_row, board_columns
+        )
         help_box.clear()
 
         snake = Snake(init_row, init_column, board_rows, board_columns)
 
         self.draw_snake(board_box, snake)
-        self.draw_apples(board_box, snake.apple)
+        self.draw_apples(board_box, snake.apples)
 
         board_box.keypad(1)
         key = curses.KEY_RIGHT
         failed = False
+        board_box.timeout(self.level + len(snake.snake_coordinates))
         while not failed:
             help_box.clear()
-            self.type_message_in_box(help_box, CONTROLS_HELP)
+            self.type_message_in_box(
+                help_box, CONTROLS_HELP.format(level=self.level.name)
+            )
             self.type_score_in_box(help_box, f'Score: {self.score}')
-            board_box.timeout(
-                150 - (
-                    len(snake.snake_coordinates) // 5
-                    + len(snake.snake_coordinates) // 10
-                ) % 120)
-
             previous_key = key
             event = board_box.getch()
             if event != -1:
@@ -169,8 +168,8 @@ class SnakeMain:
                 key = curses.KEY_RIGHT
                 board_box.clear()
                 board_box.box()
-                help_box.clear()
                 board_box.refresh()
+                help_box.clear()
                 snake = Snake(
                     init_row, init_column, board_rows, board_columns
                 )
@@ -192,6 +191,13 @@ class SnakeMain:
                 curses.KEY_LEFT,
             ):
                 key = previous_key
+            elif (
+                previous_key == curses.KEY_DOWN and key == curses.KEY_UP
+                or previous_key == curses.KEY_UP and key == curses.KEY_DOWN
+                or previous_key == curses.KEY_LEFT and key == curses.KEY_RIGHT
+                or previous_key == curses.KEY_RIGHT and key == curses.KEY_LEFT
+            ):
+                key = previous_key
             else:
                 new_row = (
                     snake.head.row
@@ -206,15 +212,18 @@ class SnakeMain:
                 snake.snake_coordinates.insert(
                     0, Coordinates(row=new_row, column=new_column)
                 )
+
                 if (
                     snake.is_stuck_in_borders(board_rows, board_columns)
                     or snake.is_stuck_with_self()
                 ):
                     failed = True
-                elif snake.head == snake.apple:
+                elif snake.head in snake.apples:
+                    curses.beep()
                     self.score += 1
-                    snake.apple.append(snake.generate_apple())
-                    self.draw_apples(board_box, snake.apple)
+                    snake.apples.remove(snake.head)
+                    snake.apples.append(snake.generate_apple())
+                    self.draw_apples(board_box, snake.apples)
                 else:
                     tail_end = snake.snake_coordinates.pop()
                     board_box.addstr(tail_end.row, tail_end.column, ' ')
@@ -232,14 +241,19 @@ class SnakeMain:
                 )
                 board_box.addstr(
                     self.screen_sizes[0] // 2 + 1,
+                    self.screen_sizes[1] // 2 - 8,
+                    f'Your score is: {self.score}.'
+                )
+                board_box.addstr(
+                    self.screen_sizes[0] // 2 + 2,
                     self.screen_sizes[1] // 2 - 6,
                     '[Press Enter]'
                 )
+                self.score = 0
                 while True:
                     key = board_box.getch()
                     if key in [curses.KEY_ENTER, ord('\n')]:
                         break
 
-            self.window.refresh()
-
         self.main_menu.display()
+

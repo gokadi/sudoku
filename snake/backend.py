@@ -23,7 +23,7 @@ class Snake:
             Coordinates(head_column - 1, head_row),
             Coordinates(head_column - 2, head_row),
         ]
-        self.apple = self.generate_apple()
+        self.apples = [self.generate_apple()]
 
     def move_down(self):
         self.snake_coordinates.insert(
@@ -39,22 +39,22 @@ class Snake:
         return self.snake_coordinates[1:]
 
     def generate_apple(self):
-        apple = []
-        while apple is []:
-            column = random.randint(self.init_column + 1, self.end_column - 1)
-            row = random.randint(self.init_row + 1, self.end_row - 1)
+        apple = None
+        while not apple:
+            column = random.randint(self.init_column + 3, self.end_column - 3)
+            row = random.randint(self.init_row + 3, self.end_row - 3)
             apple_coordinate = Coordinates(column, row)
             if apple_coordinate not in self.snake_coordinates:
-                apple.append(apple_coordinate)
+                apple = apple_coordinate
         return apple
 
     def is_stuck_in_borders(self, max_rows: int, max_columns: int) -> bool:
         head_coordinates = self.head
         return (
             head_coordinates.row >= max_rows - 1
-            or head_coordinates.row <= 0
+            or head_coordinates.row <= self.init_row
             or head_coordinates.column >= max_columns - 1
-            or head_coordinates.column <= 0
+            or head_coordinates.column <= self.init_column
         )
 
     def is_stuck_with_self(self) -> bool:

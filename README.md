@@ -9,3 +9,5 @@ TODOs:
 * configure deploy package to PyPi
 * create docs
 * create dockerfile and deploy to hub
+* add labels at the game start for each game
+* refactor snake (too complex if's)
